@@ -1,0 +1,176 @@
+
+// The points selected in the configuration space are stored
+// in the points array.
+ArrayList<Point> points = new ArrayList<>();
+
+// The obstacles selected in the work space are stored in the
+// obstacles array. 
+ArrayList<Point> obstacles = new ArrayList<>();
+
+// This is the data structure your search algorithm will 
+// return. It's the parent relation of a tree, so each 
+// vertex of the tree is a key and the value it maps to is
+// its parent node. 
+HashMap<Point, Point> searchTree = null;
+
+void setup() {
+  size(1200, 600);
+  background(255);
+  
+  // Adds the configuration points we will sample for
+  // motion planning purposes. The Point class is helpful
+  // because it performs the conversion between screen
+  // space (which are pixel values from 10 to 590, to 
+  // angles. See Point class for more detail. 
+  for (int i = 10; i <= 590; i += 10) {
+    for (int j = 10; j <= 590; j += 10) {
+      sample_points.add(new Point(i, j));
+    }
+  }
+}
+
+// Returns true iff the mouse is in the configuration space. 
+boolean mouse_in_config_space() {
+  return 13 < mouseX && mouseX < 587 &&
+         13 < mouseY && mouseY < 587;
+}
+
+// Returns true iff the mouse is in the work space. 
+boolean mouse_in_workspace() {
+  return 613 < mouseX && mouseX < 1187 &&
+         13 < mouseY && mouseY < 587;
+}
+
+// The time value for animating the motion between the two 
+// states of the robot arm
+int t = 0;
+
+void draw() {
+  background(255);
+  
+  noFill();
+  
+  // Draw a small circle instead of hte cursor when the mouse is in the configuration space
+  if (mouse_in_config_space()) {
+    stroke(255, 0, 0);
+    noCursor();
+    fill(255, 0, 0);
+    circle(mouseX, mouseY, 6);
+    noFill();
+  } else {
+    cursor(ARROW);
+  }
+  rect(10, 10, 580, 580);
+  
+  stroke(0);
+  rect(610, 10, 580, 580);
+  
+  // Draw the selected points in the configuration space
+  fill(0, 0, 255);
+  stroke(0, 0, 255);
+  for (Point p : points) circle(p.x, p.y, 6);
+  
+  // Draw the obstacles
+  noFill();
+  for (Point p : obstacles) circle(p.x, p.y, 40);
+  
+  // If the mouse is in the configuration space, draw a red copy of 
+  // robot arm (use the Point class's theta1 and theta2 attributes)
+  // And the robot_joint function
+  if (mouse_in_config_space()) {
+    draw_robot_arm(new Point(mouseX, mouseY), 255, 0, 0);
+  }
+  
+  // Draw the robot arms for the selected configuration points
+  //for (Point p : points) draw_robot_arm(p, 0, 0, 255);
+   for (int i = 0; i < points.size(); i++) {
+     if (i % 2 == 0){
+      // This was easier to see where we started and how we got to the end
+      draw_robot_arm(points.get(i), 0, 0, 0);
+     } else {
+      draw_robot_arm(points.get(i), 0, 0, 255);
+
+     }
+    }
+  
+  // If we have two selected configuration points and there is a path
+  // between them, then searchTree should not be null, and we can
+  // animate the path between the two
+  if (searchTree != null) {
+    stroke(200, 200, 200);
+    noFill();
+    
+    // Extract the path from the tree
+    ArrayList<Point> path = extractPath(searchTree, nearestSampleTo(points.get(1)));
+    
+    // Draw the points of the path in the configurations pace
+    for (Point p : path) circle(p.x, p.y, 6);
+    
+    // Select a point at time t along the path. I'm cheating here in one sense, I 
+    // wonder if you can figure out where
+    int idx = t / 10;
+    if (idx + 1 >= path.size()) { t = idx = 0; }
+    Point p1 = path.get(idx);
+    Point p2 = path.get(idx + 1);
+    float dt = (t % 10) / 10.f;
+    
+    Point curr = p1.distTo(p2) <= 20 ? 
+                  new Point((int)(p2.x * dt + p1.x * (1-dt)), (int)(p2.y * dt + p1.y * (1-dt))) :
+                  p1;
+    
+    stroke(255, 0, 255);
+    circle(curr.x, curr.y, 6);
+    draw_robot_arm(curr, 255, 0, 255);
+    t += 1; // Advance time
+  }
+  
+  // If the mouse is in the configuration space, 
+  // draw the nearby sample points
+  if (mouse_in_config_space()) {
+    Point n = nearestSampleTo(new Point(mouseX, mouseY));
+    Point nUp = sampleAbove(n);
+    Point nDn = sampleBelow(n);
+    Point nRt = sampleRight(n);
+    Point nLt = sampleLeft(n);
+    
+    stroke(128, 128, 128);
+    noFill();
+    circle(n.x, n.y, 6);
+    circle(nUp.x, nUp.y, 6);
+    circle(nDn.x, nDn.y, 6);
+    circle(nRt.x, nRt.y, 6);
+    circle(nLt.x, nLt.y, 6);
+  }
+  
+}
+
+
+void mouseReleased() {
+  if (mouse_in_config_space()) {
+    if (points.size() == 2) {
+      points.clear();
+      searchTree = null;  
+    }
+    points.add(new Point(mouseX, mouseY));
+    if (points.size() == 2) {
+      searchTree = search(nearestSampleTo(points.get(0)), nearestSampleTo(points.get(1)));
+      t = 0;
+    }
+  } else if (mouse_in_workspace()) {
+    obstacles.add(new Point(mouseX, mouseY));
+    if (points.size() == 2) {
+      searchTree = search(nearestSampleTo(points.get(0)), nearestSampleTo(points.get(1)));
+      t = 0;
+    }
+  }
+}
+
+void keyReleased() {
+  if (key == 'c') {
+    obstacles.clear();
+    if (points.size() == 2) {
+      searchTree = search(nearestSampleTo(points.get(0)), nearestSampleTo(points.get(1)));
+      t = 0;
+    }
+  }
+}

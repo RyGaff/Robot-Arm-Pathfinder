@@ -1,0 +1,150 @@
+
+/**
+ * Convenience class for storing x, y coordinates
+ * as well as converting between the configuration space
+ * on-screen pixel value coordinates and the configuration
+ * angles of the robot arm.
+ *
+ * Also includes proper equals and hashCode overrides, 
+ * so that they can be used as key values in a hash 
+ * table. 
+ */ 
+class Point implements Comparable<Point>{ 
+  int x, y; 
+  Point target;
+  public Point(int x, int y) { this.x = x; this.y = y; }
+
+  @Override
+  public boolean equals(Object p) {
+    if (p instanceof Point) {
+      Point pCast = (Point) p;
+      return x == pCast.x && y == pCast.y;
+    } else { 
+      return false; 
+     }
+  }
+  @Override
+  public int hashCode() {
+    return (new Integer(x*1200 + y)).hashCode();
+  }
+  
+  float theta1() {
+    return 2 * PI * (x - 13) / 574.f;
+  }
+  
+  float theta2() {
+    return 2 * PI * (587 - y) / 574.f;
+  }
+  
+  float distTo(Point p) {
+    
+    float dx = p.x - x;
+    float dy = p.y - y;
+    return sqrt(dx * dx + dy * dy);
+  }
+  
+  Point setTarget(Point p){
+    this.target = p;
+    return this;
+  }
+  
+  ArrayList<Point> getNeighbors(){
+    Point[] potneighbors = new Point[]{sampleAbove(this).setTarget(this.target), sampleBelow(this).setTarget(this.target),
+    sampleRight(this).setTarget(this.target), sampleLeft(this).setTarget(this.target)};
+    
+    ArrayList<Point> ret = new ArrayList<>();
+    
+    for (int i = 0 ; i < potneighbors.length; i++){
+      Point p = potneighbors[i];
+    
+      if (!is_valid_robot_arm(p)){
+        continue;
+      }
+      ret.add(p);
+      
+    }
+
+    return ret;
+    //return new Point[]{sampleAbove(this).setTarget(this.target), sampleBelow(this).setTarget(this.target),
+  //sampleRight(this).setTarget(this.target), sampleLeft(this).setTarget(this.target)};
+  }
+  
+  float numCloseObj(float range){
+     //int count = 0;
+     float amount = 0.0;
+     for (Point o: obstacles){
+       if (this.distTo(o) < range) amount += this.distTo(o);
+     }
+     return amount;
+  }
+  
+  @Override
+  public int compareTo(Point p){
+    // Heuristic
+    Segment[] thisArm = robot_arm(p);
+    Segment[] newArm = robot_arm(p);
+    float closeToGoal = target.numCloseObj(50.0);
+    float thisScore = this.distTo(target) + (this.numCloseObj(50.0) - closeToGoal);
+    float pScore = p.distTo(target) + (p.numCloseObj(50.0) - closeToGoal);
+    
+    if (thisScore < pScore){
+      return -1;
+    }
+    else if (thisScore > pScore){
+      return 1;
+    } else {
+      return 0;
+    }
+    
+  }
+}
+
+/** 
+ * Convenience class for storing line segments and calculating the
+ * distance from a point to a line segment, 
+ * as well as whether a segment intersects any of the obstacles. 
+ */
+class Segment {
+  Point p, q;
+  public Segment(Point p, Point q) { this.p = p; this.q = q; }
+  
+  // NGL: didn't want to go dig this code out of my repository so I asked 
+  // ChatGPT to do it. It created a bunch of extraneous variables (which I deleted), 
+  // but it got the implementation right, so...
+  public float distanceToPoint(Point point) {
+      float x = point.x;
+      float y = point.y;
+
+      float dx = q.x - p.x;
+      float dy = q.y - p.y;
+
+      float lengthSquared = dx * dx + dy * dy;
+
+      // If the segment has zero length, return the distance from the point to one of the endpoints
+      if (lengthSquared == 0.0) {
+          return sqrt((x - p.x) * (x - p.x) + (y - p.y) * (y - p.y));
+      }
+
+      float t = ((x - p.x) * dx + (y - p.y) * dy) / lengthSquared;
+
+      if (t < 0.0) {
+          // Closest point is the starting point of the segment
+          return sqrt((x - p.x) * (x - p.x) + (y - p.y) * (y - p.y));
+      } else if (t > 1.0) {
+          // Closest point is the ending point of the segment
+          return sqrt((x - q.x) * (x - q.x) + (y - q.y) * (y - q.y));
+      } else {
+          // Closest point is along the segment
+          float closestX = p.x + t * dx;
+          float closestY = p.y + t * dy;
+          return sqrt((x - closestX) * (x - closestX) + (y - closestY) * (y - closestY));
+      }
+  }
+  
+  public boolean intersects_obstacles(ArrayList<Point> obstacles) {
+    for (Point p : obstacles) {
+      if (distanceToPoint(p) < 20) return true;
+    }
+    return false;
+  }
+}
